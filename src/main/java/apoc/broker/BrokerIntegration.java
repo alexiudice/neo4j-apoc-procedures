@@ -47,11 +47,9 @@ public class BrokerIntegration
     public static class BrokerHandler
     {
         private static Map<String,BrokerConnection> brokerConnections;
-        private final Log log;
 
-        public BrokerHandler( Log log, Map<String,BrokerConnection> brokerConnections )
+        public BrokerHandler( Map<String,BrokerConnection> brokerConnections )
         {
-            this.log = log;
             this.brokerConnections = brokerConnections;
         }
 
@@ -78,12 +76,10 @@ public class BrokerIntegration
     public static class BrokerLifeCycle
     {
         private final Log log;
-        private Map<String,BrokerConnection> brokerConnections;
 
         public BrokerLifeCycle( Log log )
         {
             this.log = log;
-            brokerConnections = new HashMap<>();
         }
 
         private static String getBrokerConfiguration( String connectionName, String key )
@@ -120,16 +116,13 @@ public class BrokerIntegration
                     switch ( brokerType )
                     {
                     case RABBITMQ:
-                        brokerConnections.put( connectionName,
-                                RabbitMqConnectionManager.addConnection( connectionName, log, ApocConfiguration.get( "broker." + connectionName ) ) );
+                        ConnectionManager.addRabbitMQConnection( connectionName, log, ApocConfiguration.get( "broker." + connectionName ) );
                         break;
                     case SQS:
-                        brokerConnections.put( connectionName,
-                                SqsConnectionManager.addConnection( connectionName, log, ApocConfiguration.get( "broker." + connectionName ) ) );
+                        ConnectionManager.addSQSConnection( connectionName, log, ApocConfiguration.get( "broker." + connectionName ) );
                         break;
                     case KAFKA:
-                        brokerConnections.put( connectionName,
-                                KafkaConnectionManager.addConnection( connectionName, log, ApocConfiguration.get( "broker." + connectionName ) ) );
+                        ConnectionManager.addKafkaConnection( connectionName, log, ApocConfiguration.get( "broker." + connectionName ) );
                         break;
                     default:
                         break;
@@ -137,15 +130,12 @@ public class BrokerIntegration
                 }
             }
 
-            new BrokerHandler( log, brokerConnections );
+            new BrokerHandler( ConnectionManager.getBrokerConnections() );
         }
 
         public void stop()
         {
-            for ( BrokerConnection brokerConnection : brokerConnections.values() )
-            {
-                brokerConnection.stop();
-            }
+            ConnectionManager.closeConnections();
         }
     }
 }

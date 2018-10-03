@@ -7,49 +7,35 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.neo4j.logging.Log;
+import org.neo4j.procedure.Name;
 
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.stream.Stream;
 
-import org.neo4j.logging.Log;
-import org.neo4j.procedure.Name;
-
-public class KafkaConnectionManager
+public class KafkaConnectionFactory
 {
 
-    private static Map<String,KafkaConnection> kafkaConnectionMap = new HashMap<>();
-
-    public static KafkaConnection addConnection( String connectionName, Log log, Map<String,Object> configuration )
+    private KafkaConnectionFactory()
     {
-        KafkaConnection kafkaConnection = new KafkaConnection( log, connectionName, configuration );
-        kafkaConnectionMap.put( connectionName, kafkaConnection );
-        return kafkaConnection;
+
     }
 
-    public static KafkaConnection getConnection( String connectionName )
+    public static KafkaConnection createConnection( String connectionName, Log log, Map<String,Object> configuration )
     {
-        return kafkaConnectionMap.get( connectionName );
-    }
-
-    public static void removeConnection( String connectionName )
-    {
-        kafkaConnectionMap.get( connectionName ).stop();
-        kafkaConnectionMap.put( connectionName, null );
-        kafkaConnectionMap.remove( connectionName );
+        return new KafkaConnection( log, connectionName, configuration );
     }
 
     public static class KafkaConnection implements BrokerConnection
     {
         private static final Integer pollSecondsDefault = 1;
-        private static ObjectMapper objectMapper = new ObjectMapper();
         private Log log;
         private String connectionName;
         private Map<String,Object> configuration;

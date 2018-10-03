@@ -11,45 +11,31 @@ import com.amazonaws.services.sqs.model.ReceiveMessageResult;
 import com.amazonaws.services.sqs.model.SendMessageRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.lang3.StringUtils;
+import org.neo4j.logging.Log;
+import org.neo4j.procedure.Name;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
-import org.neo4j.logging.Log;
-import org.neo4j.procedure.Name;
-
-public class SqsConnectionManager
+public class SqsConnectionFactory
 {
 
-    private static Map<String,SqsConnection> sqsConnectionMap = new HashMap<>();
-
-    public static SqsConnection addConnection( String connectionName, Log log, Map<String,Object> configuration )
+    private SqsConnectionFactory()
     {
-        SqsConnection sqsConnection = new SqsConnection( log, connectionName, configuration );
-        sqsConnectionMap.put( connectionName, sqsConnection );
-        return sqsConnection;
     }
 
-    public static SqsConnection getConnection( String connectionName )
+    public static SqsConnection createConnection( String connectionName, Log log, Map<String,Object> configuration )
     {
-        return sqsConnectionMap.get( connectionName );
-    }
-
-    public static void removeConnection( String connectionName )
-    {
-        sqsConnectionMap.get( connectionName ).stop();
-        sqsConnectionMap.put( connectionName, null );
+        return new SqsConnection( log, connectionName, configuration );
     }
 
     public static class SqsConnection implements BrokerConnection
     {
 
-        private static ObjectMapper objectMapper = new ObjectMapper();
         private Log log;
         private String connectionName;
         private Map<String,Object> configuration;

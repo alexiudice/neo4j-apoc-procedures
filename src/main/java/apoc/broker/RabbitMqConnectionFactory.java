@@ -18,32 +18,18 @@ import java.util.stream.Stream;
 import org.neo4j.logging.Log;
 import org.neo4j.procedure.Name;
 
-public class RabbitMqConnectionManager
+public final class RabbitMqConnectionFactory
 {
 
-    private static Map<String,RabbitMqConnection> rabbitMqConnectionMap = new HashMap<>();
+    private RabbitMqConnectionFactory(){};
 
-    public static RabbitMqConnection addConnection( String connectionName, Log log, Map<String,Object> configuration )
+    public static RabbitMqConnection createConnection( String connectionName, Log log, Map<String,Object> configuration )
     {
-        RabbitMqConnection rabbitMqConnection = new RabbitMqConnection( log, connectionName, configuration );
-        rabbitMqConnectionMap.put( connectionName, rabbitMqConnection );
-        return rabbitMqConnection;
-    }
-
-    public static RabbitMqConnection getConnection( String connectionName )
-    {
-        return rabbitMqConnectionMap.get( connectionName );
-    }
-
-    public static void removeConnection( String connectionName )
-    {
-        rabbitMqConnectionMap.get( connectionName ).stop();
-        rabbitMqConnectionMap.put( connectionName, null );
+        return new RabbitMqConnection( log, connectionName, configuration );
     }
 
     public static class RabbitMqConnection implements BrokerConnection
     {
-        private static ObjectMapper objectMapper = new ObjectMapper();
         private Log log;
         private String connectionName;
         private Map<String,Object> configuration;
