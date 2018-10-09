@@ -1,12 +1,17 @@
 package apoc.broker;
 
+import apoc.Pools;
 import org.neo4j.logging.Log;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 
 public class ConnectionManager
 {
+    static ExecutorService pool = Pools.DEFAULT;
+
     private ConnectionManager()
     {
     }
@@ -31,9 +36,19 @@ public class ConnectionManager
         return brokerConnections.put( connectionName, KafkaConnectionFactory.createConnection( connectionName, log, configuration ) );
     }
 
+    public static void asyncReconnect( String connectionName ) throws Exception
+    {
+        pool.submit( () -> {
+            BrokerConnection brokerConnection = ConnectionFactory.reconnect( (brokerConnections.get( connectionName )) );
+            brokerConnections.put( connectionName, brokerConnection );
+            BrokerIntegration.BrokerHandler.setBrokerConnections( brokerConnections );
+            return brokerConnection;
+        } );
+    }
+
     public static void closeConnections()
     {
-        brokerConnections.forEach( (name,connection) -> connection.stop());
+        brokerConnections.forEach( ( name, connection ) -> connection.stop() );
     }
 
     public static Map<String,BrokerConnection> getBrokerConnections()
