@@ -1,6 +1,7 @@
 package apoc.broker;
 
 import apoc.ApocConfiguration;
+import apoc.Pools;
 import apoc.broker.logging.BrokerLogger;
 import org.apache.commons.lang3.StringUtils;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
@@ -11,7 +12,9 @@ import org.neo4j.procedure.Name;
 import org.neo4j.procedure.Procedure;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -47,10 +50,12 @@ public class BrokerIntegration
     public static class BrokerHandler
     {
         private static Map<String,BrokerConnection> brokerConnections;
+        private static Log neo4jLog;
 
-        public BrokerHandler( Map<String,BrokerConnection> brokerConnections )
+        public BrokerHandler( Map<String,BrokerConnection> brokerConnections, Log log )
         {
             this.brokerConnections = brokerConnections;
+            neo4jLog = log;
         }
 
         public static Stream<BrokerMessage> sendMessageToBrokerConnection( String connection, Map<String,Object> message, Map<String,Object> configuration )
@@ -61,12 +66,23 @@ public class BrokerIntegration
                 throw new IOException( "Broker Exception. Connection '" + connection + "' is not a configured broker connection." );
             }
             try {
-                return (brokerConnections.get( connection )).send( message, configuration );
+                (brokerConnections.get( connection )).checkConnectionHealth();
+                Stream<BrokerMessage> brokerMessageStream = (brokerConnections.get( connection )).send( message, configuration );
+
+                Pools.DEFAULT.execute( (Runnable) () -> retryMessagesForConnectionAsynch( connection ) );
+
+
+                return brokerMessageStream;
             }
             catch ( Exception e )
             {
-                BrokerLogger.error( new BrokerLogger.LogEntry( connection, message, configuration ) );
-                ConnectionManager.asyncReconnect( connection );
+                BrokerLogger.error( new BrokerLogger.LogLine.LogEntry( connection, message, configuration ) );
+                ConnectionManager.asyncReconnect( connection, neo4jLog);
+
+                if (BrokerLogger.IsAtThreshold())
+                {
+                    retryMessagesAsynch();
+                }
             }
             throw new RuntimeException( "Unable to send message to connection '" + connection + "'. Logged in '" + BrokerLogger.getLogName() + "'." );
         }
@@ -80,10 +96,91 @@ public class BrokerIntegration
             return brokerConnections.get( connection ).receive( configuration );
         }
 
-        public static void setBrokerConnections( Map<String,BrokerConnection> brokerConnections)
+        public static void retryMessagesForConnectionAsynch( String connectionName )
+        {
+            try
+            {
+                neo4jLog.info( "APOC Broker: Resending messages for '" + connectionName + "'." );
+                List<BrokerLogger.LogLine> linesToRemove = new ArrayList<>(  );
+                BrokerLogger.streamLogLines( connectionName ).parallel().forEach( (ll) ->
+                {
+                    BrokerLogger.LogLine.LogEntry logEntry = ll.getLogEntry();
+                    Boolean b = resendBrokerMessage( logEntry.getConnectionName(), logEntry.getMessage(), logEntry.getConfiguration() );
+                    if(b)
+                    {
+                        //Send successfull. Now delete.
+                        linesToRemove.add( ll );
+                    }
+
+                });
+                if (!linesToRemove.isEmpty())
+                {
+                    BrokerLogger.removeLogLineBatch( linesToRemove );
+                }
+            }
+            catch ( Exception e )
+            {
+
+            }
+
+        }
+
+        public static void retryMessagesAsynch( )
+        {
+            try
+            {
+                neo4jLog.info( "APOC Broker: Logger has reached its message limit. Resending messages for all connections." );
+                List<BrokerLogger.LogLine> linesToRemove = new ArrayList<>(  );
+                BrokerLogger.streamLogLines( ).parallel().forEach( (ll) ->
+                {
+                    BrokerLogger.LogLine.LogEntry logEntry = ll.getLogEntry();
+                    Boolean b = resendBrokerMessage( logEntry.getConnectionName(), logEntry.getMessage(), logEntry.getConfiguration() );
+                    if(b)
+                    {
+                        //Send successfull. Now delete.
+                        linesToRemove.add( ll );
+                    }
+                    if(linesToRemove.size() > 10)
+                    {
+                        BrokerLogger.removeLogLineBatch( linesToRemove );
+                        linesToRemove.clear();
+                    }
+
+                });
+                if (!linesToRemove.isEmpty())
+                {
+                    BrokerLogger.removeLogLineBatch( linesToRemove );
+                }
+            }
+            catch ( Exception e )
+            {
+
+            }
+
+        }
+
+        public static Boolean resendBrokerMessage( String connection, Map<String,Object> message, Map<String,Object> configuration )
+        {
+            if ( !brokerConnections.containsKey( connection ) )
+            {
+                throw new RuntimeException( "Broker Exception. Connection '" + connection + "' is not a configured broker connection." );
+            }
+            try
+            {
+                (brokerConnections.get( connection )).send( message, configuration );
+            }
+            catch (Exception e )
+            {
+                return false;
+            }
+            return true;
+        }
+
+        public static synchronized void setBrokerConnections( Map<String,BrokerConnection> brokerConnections)
         {
             BrokerHandler.brokerConnections = brokerConnections;
         }
+
     }
 
     public static class BrokerLifeCycle
@@ -154,7 +251,7 @@ public class BrokerIntegration
                 }
             }
 
-            new BrokerHandler( ConnectionManager.getBrokerConnections() );
+            new BrokerHandler( ConnectionManager.getBrokerConnections(), log );
         }
 
         public void stop()
