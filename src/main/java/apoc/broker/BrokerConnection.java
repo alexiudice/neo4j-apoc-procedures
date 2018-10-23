@@ -8,6 +8,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.neo4j.logging.Log;
 import org.neo4j.procedure.Name;
 
+/**
+ * @author alexanderiudice
+ */
 public interface BrokerConnection
 {
     String maxPollRecordsDefault = "1";
@@ -27,4 +30,10 @@ public interface BrokerConnection
     Log getLog();
 
     Map<String,Object> getConfiguration();
+
+    Boolean isConnected();
+    void setConnected( Boolean connected );
+
+    Boolean isReconnecting();
+    void setReconnecting( Boolean reconnecting );
 }

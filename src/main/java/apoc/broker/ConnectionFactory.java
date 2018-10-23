@@ -2,6 +2,9 @@ package apoc.broker;
 
 import java.util.Random;
 
+/**
+ * @author alexanderiudice
+ */
 public interface ConnectionFactory
 {
     static BrokerConnection recreateConnection( BrokerConnection brokerConnection ) throws Exception
@@ -25,15 +28,23 @@ public interface ConnectionFactory
         }
 
         reconnect.checkConnectionHealth();
+        reconnect.setConnected( true );
+        reconnect.setReconnecting( false );
         return reconnect;
     }
 
+    /**
+     * Reconnects the brokerConnection by attempting to create a new connection. Uses exponential backoff up to a maximum of 16 seconds.
+     * @param brokerConnection
+     * @return
+     */
     static BrokerConnection reconnect( BrokerConnection brokerConnection )
     {
         int low = 1;
         int high = 1000;
         int n = 0;
         Random r = new Random();
+        brokerConnection.setReconnecting( true );
 
         while (true)
         {
