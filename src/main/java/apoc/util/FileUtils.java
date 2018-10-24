@@ -8,6 +8,12 @@ import apoc.util.s3.S3URLConnection;
 import java.io.*;
 import java.net.URI;
 import java.net.URL;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.charset.Charset;
+import java.nio.file.StandardOpenOption;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -147,5 +153,53 @@ public class FileUtils {
     public static boolean isHdfs(String fileName) {
         Matcher matcher = HDFS_PATTERN.matcher(fileName);
         return matcher.find();
+    }
+
+    public static long scanForString(String text, File file, Charset charset) throws IOException {
+        if (text.isEmpty()) {
+            return file.exists() ? 0 : -1;
+        }
+        // First of all, get a byte array off of this string:
+        byte[] bytes = text.getBytes(charset);
+
+        // Next, search the file for the byte array.
+        try (DataInputStream dis = new DataInputStream(new FileInputStream(file))) {
+
+            List<Integer> matches = new LinkedList<>();
+
+            for (long pos = 0; pos < file.length(); pos++) {
+                byte bite = dis.readByte();
+
+                for (int i = 0; i < matches.size(); i++) {
+                    Integer m = matches.get(i);
+                    if (bytes[m] != bite) {
+                        matches.remove(i--);
+                    } else if (++m == bytes.length) {
+                        return pos - m + 1;
+                    } else {
+                        matches.set(i, m);
+                    }
+                }
+
+                if (bytes[0] == bite) {
+                    matches.add(1);
+                }
+            }
+        }
+        return -1;
+    }
+
+    public static void replaceText(String text, String replacement, File file, Charset charset) throws IOException {
+        // Open a FileChannel with writing ability. You don't really need the read
+        // ability for this specific case, but there it is in case you need it for
+        // something else.
+        try (FileChannel channel = FileChannel.open(file.toPath(), StandardOpenOption.WRITE, StandardOpenOption.READ)) {
+            long scanForString = scanForString(text, file, charset);
+            if (scanForString == -1) {
+                throw new RuntimeException( "String not found. ");
+            }
+            channel.position(scanForString);
+            channel.write(ByteBuffer.wrap(replacement.getBytes(charset)));
+        }
     }
 }
