@@ -1,6 +1,5 @@
 package apoc.broker;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -18,7 +17,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Random;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
 public class KafkaConnectionFactory implements ConnectionFactory
@@ -41,6 +40,9 @@ public class KafkaConnectionFactory implements ConnectionFactory
         private Map<String,Object> configuration;
         private KafkaProducer<String,byte[]> kafkaProducer;
         private KafkaConsumer<String,byte[]> kafkaConsumer;
+
+        private AtomicBoolean connected = new AtomicBoolean( false );
+        private AtomicBoolean reconnecting = new AtomicBoolean( false );
 
         public KafkaConnection( Log log, String connectionName, Map<String,Object> configuration )
         {
@@ -74,6 +76,8 @@ public class KafkaConnectionFactory implements ConnectionFactory
                 }
 
                 kafkaConsumer = new KafkaConsumer<String,byte[]>( consumerProperties );
+
+                connected.set( true );
             }
             catch ( Exception e )
             {
@@ -82,7 +86,7 @@ public class KafkaConnectionFactory implements ConnectionFactory
         }
 
         @Override
-        public Stream<BrokerMessage> send( @Name( "message" ) Map<String,Object> message, @Name( "configuration" ) Map<String,Object> parameters )
+        public Stream<BrokerMessage> send( @Name( "message" ) Map<String,Object> message, @Name( "configuration" ) Map<String,Object> parameters ) throws Exception
         {
             // Topic and value are required
             if ( !parameters.containsKey( "topic" ) )
@@ -104,28 +108,21 @@ public class KafkaConnectionFactory implements ConnectionFactory
                 key = (String) parameters.get( "key" );
             }
 
-            try
+            ProducerRecord<String,byte[]> producerRecord;
+            if ( partition >= 0 && !key.isEmpty() )
             {
-                ProducerRecord<String,byte[]> producerRecord;
-                if ( partition >= 0 && !key.isEmpty() )
-                {
-                    producerRecord = new ProducerRecord<>( topic, partition, key, objectMapper.writeValueAsBytes( message ) );
-                }
-                else if ( !key.isEmpty() )
-                {
-                    producerRecord = new ProducerRecord<>( topic, key, objectMapper.writeValueAsBytes( message ) );
-                }
-                else
-                {
-                    producerRecord = new ProducerRecord<>( topic, objectMapper.writeValueAsBytes( message ) );
-                }
+                producerRecord = new ProducerRecord<>( topic, partition, key, objectMapper.writeValueAsBytes( message ) );
+            }
+            else if ( !key.isEmpty() )
+            {
+                producerRecord = new ProducerRecord<>( topic, key, objectMapper.writeValueAsBytes( message ) );
+            }
+            else
+            {
+                producerRecord = new ProducerRecord<>( topic, objectMapper.writeValueAsBytes( message ) );
+            }
 
-                kafkaProducer.send( producerRecord );
-            }
-            catch ( Exception e )
-            {
-                log.error( "Broker Exception. Connection Name: " + connectionName + ". Error: " + e.toString() );
-            }
+            kafkaProducer.send( producerRecord );
 
             return Stream.of( new BrokerMessage( connectionName, message, parameters ) );
         }
@@ -216,6 +213,30 @@ public class KafkaConnectionFactory implements ConnectionFactory
         public Map<String,Object> getConfiguration()
         {
             return configuration;
+        }
+
+        @Override
+        public Boolean isConnected()
+        {
+            return connected.get();
+        }
+
+        @Override
+        public void setConnected( Boolean connected )
+        {
+            this.connected.set( connected );
+        }
+
+        @Override
+        public Boolean isReconnecting()
+        {
+            return reconnecting.get();
+        }
+
+        @Override
+        public void setReconnecting( Boolean reconnecting )
+        {
+            this.reconnecting.set( reconnecting );
         }
     }
 }

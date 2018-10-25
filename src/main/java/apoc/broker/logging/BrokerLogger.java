@@ -244,7 +244,7 @@ public class BrokerLogger
     private static File logFile;
 
     private static AtomicLong numLogEntries = new AtomicLong(  0L );
-    private static final Long retryThreshold = 10L;
+    private static final Long retryThreshold = 3L;
 
     public static void initializeBrokerLogger( GraphDatabaseAPI api, Map<String,Object> logConfiguration )
     {

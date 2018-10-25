@@ -18,7 +18,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
 public class SqsConnectionFactory implements ConnectionFactory
@@ -41,6 +41,9 @@ public class SqsConnectionFactory implements ConnectionFactory
         private Map<String,Object> configuration;
         private AmazonSQS amazonSQS;
 
+        private AtomicBoolean connected = new AtomicBoolean( false );
+        private AtomicBoolean reconnecting = new AtomicBoolean( false );
+
         public SqsConnection( Log log, String connectionName, Map<String,Object> configuration )
         {
             this.log = log;
@@ -49,10 +52,12 @@ public class SqsConnectionFactory implements ConnectionFactory
 
             amazonSQS = AmazonSQSClientBuilder.standard().withCredentials( new AWSStaticCredentialsProvider(
                     new BasicAWSCredentials( (String) configuration.get( "access.key.id" ), (String) configuration.get( "secret.key.id" ) ) ) ).build();
+
+            connected.set( true );
         }
 
         @Override
-        public Stream<BrokerMessage> send( @Name( "message" ) Map<String,Object> message, @Name( "configuration" ) Map<String,Object> configuration )
+        public Stream<BrokerMessage> send( @Name( "message" ) Map<String,Object> message, @Name( "configuration" ) Map<String,Object> configuration ) throws  Exception
         {
             if ( !configuration.containsKey( "queueName" ) )
             {
@@ -68,18 +73,11 @@ public class SqsConnectionFactory implements ConnectionFactory
 
             if ( doesQueueExistInRegion( queueName, region ) )
             {
-                try
-                {
-                    amazonSQS.sendMessage( new SendMessageRequest().withQueueUrl( queueName ).withMessageBody( objectMapper.writeValueAsString( message ) ) );
-                }
-                catch ( Exception e )
-                {
-                    log.error( "Broker Exception. Connection Name: " + connectionName + ". Error: " + e.toString() );
-                }
+                amazonSQS.sendMessage( new SendMessageRequest().withQueueUrl( queueName ).withMessageBody( objectMapper.writeValueAsString( message ) ) );
             }
             else
             {
-                log.error(
+                throw new RuntimeException(
                         "Broker Exception. Connection Name: " + connectionName + ". Error: SQS queue '" + queueName + "' does not exist in region '" + region +
                                 "'." );
             }
@@ -202,6 +200,30 @@ public class SqsConnectionFactory implements ConnectionFactory
         public Map<String,Object> getConfiguration()
         {
             return configuration;
+        }
+
+        @Override
+        public Boolean isConnected()
+        {
+            return connected.get();
+        }
+
+        @Override
+        public void setConnected( Boolean connected )
+        {
+            this.connected.getAndSet( connected );
+        }
+
+        @Override
+        public Boolean isReconnecting()
+        {
+            return reconnecting.get();
+        }
+
+        @Override
+        public void setReconnecting( Boolean reconnecting )
+        {
+            this.reconnecting.getAndSet( reconnecting );
         }
 
         @Override

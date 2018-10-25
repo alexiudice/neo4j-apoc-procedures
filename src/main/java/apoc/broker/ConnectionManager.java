@@ -35,8 +35,11 @@ public class ConnectionManager
         return brokerConnections.put( connectionName, KafkaConnectionFactory.createConnection( connectionName, log, configuration ) );
     }
 
-    public static void asyncReconnect( String connectionName, Log log ) throws Exception
+    public static void asyncReconnect( String connectionName, Log log )
     {
+        // Check if already trying to connect
+
+        // If not then start reconnection process.
         pool.submit( () -> {
             BrokerConnection brokerConnection = ConnectionFactory.reconnect( (brokerConnections.get( connectionName )) );
             log.info( "APOC Broker: Connection '" + connectionName + "' reconnected." );
@@ -46,7 +49,7 @@ public class ConnectionManager
         } );
 
         // Now read the log and resend asynch.
-        BrokerIntegration.BrokerHandler.retryMessagesForConnectionAsynch( connectionName );
+        pool.execute( (Runnable) () -> BrokerIntegration.BrokerHandler.retryMessagesForConnectionAsynch( connectionName ) );
     }
 
     public static void closeConnections()

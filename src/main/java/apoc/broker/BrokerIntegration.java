@@ -65,9 +65,10 @@ public class BrokerIntegration
             {
                 throw new IOException( "Broker Exception. Connection '" + connection + "' is not a configured broker connection." );
             }
+            BrokerConnection brokerConnection = (brokerConnections.get( connection ));
             try {
-                (brokerConnections.get( connection )).checkConnectionHealth();
-                Stream<BrokerMessage> brokerMessageStream = (brokerConnections.get( connection )).send( message, configuration );
+                brokerConnection.checkConnectionHealth();
+                Stream<BrokerMessage> brokerMessageStream = brokerConnection.send( message, configuration );
 
                 Pools.DEFAULT.execute( (Runnable) () -> retryMessagesForConnectionAsynch( connection ) );
 
@@ -77,11 +78,16 @@ public class BrokerIntegration
             catch ( Exception e )
             {
                 BrokerLogger.error( new BrokerLogger.LogLine.LogEntry( connection, message, configuration ) );
-                ConnectionManager.asyncReconnect( connection, neo4jLog);
+                brokerConnection.setConnected( false );
 
+
+                if (!brokerConnection.isReconnecting())
+                {
+                    ConnectionManager.asyncReconnect( connection, neo4jLog );
+                }
                 if (BrokerLogger.IsAtThreshold())
                 {
-                    retryMessagesAsynch();
+                    Pools.DEFAULT.execute( (Runnable) () -> retryMessagesAsynch() );
                 }
             }
             throw new RuntimeException( "Unable to send message to connection '" + connection + "'. Logged in '" + BrokerLogger.getLogName() + "'." );
@@ -100,22 +106,23 @@ public class BrokerIntegration
         {
             try
             {
-                neo4jLog.info( "APOC Broker: Resending messages for '" + connectionName + "'." );
-                List<BrokerLogger.LogLine> linesToRemove = new ArrayList<>(  );
-                BrokerLogger.streamLogLines( connectionName ).parallel().forEach( (ll) ->
+                if (brokerConnections.get( connectionName ).isConnected())
                 {
-                    BrokerLogger.LogLine.LogEntry logEntry = ll.getLogEntry();
-                    Boolean b = resendBrokerMessage( logEntry.getConnectionName(), logEntry.getMessage(), logEntry.getConfiguration() );
-                    if(b)
+                    neo4jLog.info( "APOC Broker: Resending messages for '" + connectionName + "'." );
+                    List<BrokerLogger.LogLine> linesToRemove = new ArrayList<>();
+                    BrokerLogger.streamLogLines( connectionName ).parallel().forEach( ( ll ) -> {
+                        BrokerLogger.LogLine.LogEntry logEntry = ll.getLogEntry();
+                        Boolean b = resendBrokerMessage( logEntry.getConnectionName(), logEntry.getMessage(), logEntry.getConfiguration() );
+                        if ( b )
+                        {
+                            //Send successfull. Now delete.
+                            linesToRemove.add( ll );
+                        }
+                    } );
+                    if ( !linesToRemove.isEmpty() )
                     {
-                        //Send successfull. Now delete.
-                        linesToRemove.add( ll );
+                        BrokerLogger.removeLogLineBatch( linesToRemove );
                     }
-
-                });
-                if (!linesToRemove.isEmpty())
-                {
-                    BrokerLogger.removeLogLineBatch( linesToRemove );
                 }
             }
             catch ( Exception e )
@@ -129,21 +136,24 @@ public class BrokerIntegration
         {
             try
             {
-                neo4jLog.info( "APOC Broker: Logger has reached its message limit. Resending messages for all connections." );
+                neo4jLog.info( "APOC Broker: Logger has reached its message limit. Resending messages for all healthy connections." );
                 List<BrokerLogger.LogLine> linesToRemove = new ArrayList<>(  );
                 BrokerLogger.streamLogLines( ).parallel().forEach( (ll) ->
                 {
                     BrokerLogger.LogLine.LogEntry logEntry = ll.getLogEntry();
-                    Boolean b = resendBrokerMessage( logEntry.getConnectionName(), logEntry.getMessage(), logEntry.getConfiguration() );
-                    if(b)
+                    if(brokerConnections.get(  logEntry.getConnectionName()).isConnected())
                     {
-                        //Send successfull. Now delete.
-                        linesToRemove.add( ll );
-                    }
-                    if(linesToRemove.size() > 10)
-                    {
-                        BrokerLogger.removeLogLineBatch( linesToRemove );
-                        linesToRemove.clear();
+                        Boolean b = resendBrokerMessage( logEntry.getConnectionName(), logEntry.getMessage(), logEntry.getConfiguration() );
+                        if ( b )
+                        {
+                            //Send successfull. Now delete.
+                            linesToRemove.add( ll );
+                        }
+                        if ( linesToRemove.size() > 10 )
+                        {
+                            BrokerLogger.removeLogLineBatch( linesToRemove );
+                            linesToRemove.clear();
+                        }
                     }
 
                 });
