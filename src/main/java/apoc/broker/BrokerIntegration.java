@@ -81,11 +81,29 @@ public class BrokerIntegration
     }
 
     @Procedure( mode = Mode.READ )
+    @Description( "apoc.broker.reconnect(connectionName) - A method used that reconnects without sending any messages. Broker logging must be enabled or this method will throw an error." )
+    public Stream<MapResult> reconnect( @Name( "connectionName" ) String connectionName )
+    {
+        BrokerHandler.reconnectAsync( connectionName );
+        Map<String,Object> result = new HashMap<>(  );
+        result.put( "connection", connectionName );
+        return Stream.of(  new MapResult( result ) );
+    }
+
+    @Procedure( mode = Mode.READ )
     @Description( "apoc.broker.checkConnection(connectionName) - A method used for checking the connection of a specified namespace." )
     public Stream<MapResult> checkConnection( @Name( "connectionName" ) String connectionName )
     {
 
         return BrokerHandler.checkConnection( connectionName );
+    }
+
+    @Procedure( mode = Mode.READ )
+    @Description( "apoc.broker.checkReconnect(connectionName) - A method used for checking the reconnection status of a specified namespace." )
+    public Stream<MapResult> checkReconnect( @Name( "connectionName" ) String connectionName )
+    {
+
+        return BrokerHandler.checkReconnect( connectionName );
     }
 
 
@@ -198,6 +216,14 @@ public class BrokerIntegration
             Map<String,Object> result = new HashMap<>(  );
             result.put( "connection", connectionName );
             result.put( "isConnected", ConnectionManager.getConnection( connectionName ).isConnected() );
+            return Stream.of(  new MapResult( result ) );
+        }
+
+        public static Stream<MapResult> checkReconnect( String connectionName )
+        {
+            Map<String,Object> result = new HashMap<>(  );
+            result.put( "connection", connectionName );
+            result.put( "isReconnecting", ConnectionManager.getConnection( connectionName ).isReconnecting() );
             return Stream.of(  new MapResult( result ) );
         }
 
@@ -329,6 +355,15 @@ public class BrokerIntegration
                 neo4jLog.info( "APOC Broker: Connection '" + connectionName + "' reconnected." );
                 ConnectionManager.updateConnection( connectionName, reconnect );
                 retryMessagesForConnectionAsync( connectionName );
+            } );
+        }
+
+        private static void reconnectAsync( String connectionName )
+        {
+            Pools.DEFAULT.execute( () -> {
+                BrokerConnection reconnect = ConnectionFactory.reconnect( getConnection( connectionName ) );
+                neo4jLog.info( "APOC Broker: Connection '" + connectionName + "' reconnected." );
+                ConnectionManager.updateConnection( connectionName, reconnect );
             } );
         }
     }
