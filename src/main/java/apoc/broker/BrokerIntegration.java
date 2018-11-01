@@ -54,7 +54,7 @@ public class BrokerIntegration
     }
 
     @Procedure( mode = Mode.READ )
-    @Description( "apoc.broker.flipConnection(connectionName) - A method used for flipping the connection between on and off." )
+    @Description( "apoc.broker.flipConnection(connectionName) - A method used for flipping the connection between on and off. For testing purposes." )
     public Stream<MapResult> flipConnection( @Name( "connectionName" ) String connectionName )
     {
 
@@ -62,7 +62,7 @@ public class BrokerIntegration
     }
 
     @Procedure( mode = Mode.READ )
-    @Description( "apoc.broker.flipReconnect(connectionName) - A method used for flipping the reconnect between on and off. Turn it to TRUE to stop reconnect from happening." )
+    @Description( "apoc.broker.flipReconnect(connectionName) - A method used for flipping the reconnect between on and off. Turn it to TRUE to stop reconnect from happening. For testing purposes." )
     public Stream<MapResult> flipReconnect( @Name( "connectionName" ) String connectionName )
     {
 
@@ -70,8 +70,25 @@ public class BrokerIntegration
     }
 
     @Procedure( mode = Mode.READ )
+    @Description( "apoc.broker.checkConnection(connectionName) - A method used for checking the connection of a specified namespace. For testing purposes." )
+    public Stream<MapResult> checkConnection( @Name( "connectionName" ) String connectionName )
+    {
+
+        return BrokerHandler.checkConnection( connectionName );
+    }
+
+    @Procedure( mode = Mode.READ )
+    @Description( "apoc.broker.checkReconnect(connectionName) - A method used for checking the reconnection status of a specified namespace. For testing purposes." )
+    public Stream<MapResult> checkReconnect( @Name( "connectionName" ) String connectionName )
+    {
+
+        return BrokerHandler.checkReconnect( connectionName );
+    }
+
+
+    @Procedure( mode = Mode.READ )
     @Description( "apoc.broker.resendMessages(connectionName) - A method used that resends the messages for the specified connection." +
-            " Messages are retrieved from the logging file associated with that connection. Broker logging must be enabled or this method will throw an error." )
+            " Messages are retrieved from the logging file associated with that connection. Broker logging must be enabled or this method will throw an error. For testing purposes." )
     public Stream<MapResult> resendMessages( @Name( "connectionName" ) String connectionName, @Name(value = "numToSend", defaultValue = "0") Long numToSend )
     {
         BrokerHandler.retryMessagesForConnectionAsync( connectionName, numToSend );
@@ -81,29 +98,13 @@ public class BrokerIntegration
     }
 
     @Procedure( mode = Mode.READ )
-    @Description( "apoc.broker.reconnect(connectionName) - A method used that reconnects without sending any messages. Broker logging must be enabled or this method will throw an error." )
+    @Description( "apoc.broker.reconnect(connectionName) - A method used that reconnects without sending any messages. Broker logging must be enabled or this method will throw an error. For testing purposes." )
     public Stream<MapResult> reconnect( @Name( "connectionName" ) String connectionName )
     {
         BrokerHandler.reconnectAsync( connectionName );
         Map<String,Object> result = new HashMap<>(  );
         result.put( "connection", connectionName );
         return Stream.of(  new MapResult( result ) );
-    }
-
-    @Procedure( mode = Mode.READ )
-    @Description( "apoc.broker.checkConnection(connectionName) - A method used for checking the connection of a specified namespace." )
-    public Stream<MapResult> checkConnection( @Name( "connectionName" ) String connectionName )
-    {
-
-        return BrokerHandler.checkConnection( connectionName );
-    }
-
-    @Procedure( mode = Mode.READ )
-    @Description( "apoc.broker.checkReconnect(connectionName) - A method used for checking the reconnection status of a specified namespace." )
-    public Stream<MapResult> checkReconnect( @Name( "connectionName" ) String connectionName )
-    {
-
-        return BrokerHandler.checkReconnect( connectionName );
     }
 
 
@@ -128,6 +129,7 @@ public class BrokerIntegration
             {
                 try
                 {
+                    startReconnectForDeadOnArrivalConnections();
                     resendMessagesForHealthyConnections();
                 }
                 catch ( Exception e )
@@ -365,6 +367,18 @@ public class BrokerIntegration
                 neo4jLog.info( "APOC Broker: Connection '" + connectionName + "' reconnected." );
                 ConnectionManager.updateConnection( connectionName, reconnect );
             } );
+        }
+
+        private static void startReconnectForDeadOnArrivalConnections()
+        {
+            ConnectionManager.getConnectionNames().stream().forEach( connectionName -> {
+                BrokerConnection connection = ConnectionManager.getConnection( connectionName );
+                if(!connection.isConnected() && !connection.isReconnecting())
+                {
+                    reconnectAndResendAsync( connectionName );
+                }
+            } );
+
         }
     }
 

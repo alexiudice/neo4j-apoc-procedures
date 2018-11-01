@@ -3,7 +3,9 @@ package apoc.broker;
 import apoc.Pools;
 import org.neo4j.logging.Log;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 
@@ -44,6 +46,10 @@ public class ConnectionManager
     public static Boolean doesExist( String connectionName )
     {
         return brokerConnections.containsKey( connectionName );
+    }
+
+    public static Set<String> getConnectionNames(){
+        return brokerConnections.keySet();
     }
 
     public static void closeConnection( String connectionName )
