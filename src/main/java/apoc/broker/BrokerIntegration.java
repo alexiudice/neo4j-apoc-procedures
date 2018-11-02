@@ -408,23 +408,20 @@ public class BrokerIntegration
 
         private static String getLogsConfiguration( String key )
         {
-            return (String) (ApocConfiguration.get( "broker." + LOGS_CONFIG  )).get( key );
+            return (String) (ApocConfiguration.get( "brokers." + LOGS_CONFIG  )).get( key );
         }
 
 
         public void start()
         {
-            Map<String,Object> value = ApocConfiguration.get( "broker" );
+            Map<String,Object> value = ApocConfiguration.get( "broker." );
 
             Set<String> connectionList = new HashSet<>();
             Boolean loggingEnabled = false;
 
             value.forEach( ( configurationString, object ) -> {
                 String connectionName = configurationString.split( "\\." )[0];
-                if (!connectionName.equals( LOGS_CONFIG ))
-                {
-                    connectionList.add( connectionName );
-                }
+                connectionList.add( connectionName );
             } );
 
             if ( Boolean.valueOf( getLogsConfiguration( "enabled" ) ) )
