@@ -17,8 +17,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Consumer;
 
-import static org.neo4j.io.file.Files.createOrOpenAsOuputStream;
-
 /**
  * @author alexanderiudice
  */
@@ -108,6 +106,24 @@ public class BrokerLogService extends AbstractLogService implements Lifecycle
         logProviderConsumer.accept( internalLogProvider );
         this.closeable = outputStream;
         this.logService = new SimpleLogService( userLogProvider, internalLogProvider );
+    }
+
+    /**
+     * Stripped directly from org.neo4j.io.file Files.java
+     * Creates a file, or opens an existing file. If necessary, parent directories will be created.
+     *
+     * @param fileSystem The filesystem abstraction to use
+     * @param file The file to create or open
+     * @return An output stream
+     * @throws IOException If an error occurs creating directories or opening the file
+     */
+    private static OutputStream createOrOpenAsOuputStream( FileSystemAbstraction fileSystem, File file, boolean append ) throws IOException
+    {
+        if ( file.getParentFile() != null )
+        {
+            fileSystem.mkdirs( file.getParentFile() );
+        }
+        return fileSystem.openAsOutputStream( file, append );
     }
 
     @Override
