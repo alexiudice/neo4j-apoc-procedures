@@ -268,7 +268,6 @@ public class BrokerIntegration
             {
                 if ( getConnection( connectionName ).isConnected() )
                 {
-                    neo4jLog.info( "APOC Broker: Resending messages for '" + connectionName + "'." );
                     Pools.DEFAULT.execute( () -> {
                         try
                         {
@@ -280,6 +279,7 @@ public class BrokerIntegration
                             for ( BrokerLogger.LogLine.LogEntry logEntry : BrokerLogger.streamLogLines( logInfo ).map(
                                     logLine -> logLine.getLogEntry() ).collect( Collectors.toList() ) )
                             {
+                                neo4jLog.info( "APOC Broker: Resending message for '" + connectionName + "'." );
 
                                 Boolean resent = resendBrokerMessage( logEntry.getConnectionName(), logEntry.getMessage(), logEntry.getConfiguration() );
                                 if ( resent )
