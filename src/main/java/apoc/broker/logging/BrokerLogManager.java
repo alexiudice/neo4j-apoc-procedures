@@ -130,35 +130,45 @@ public class BrokerLogManager
     {
         synchronized ( brokerLog )
         {
+
+            String  tmpFileName = RandomStringUtils.randomAlphabetic( 5 );
             try
             {
-                File tmpFile = File.createTempFile( RandomStringUtils.randomAlphabetic( 5 ), ".log", brokerLog.getParentFile() );
-
-                DataOutputStream dataOutputStream = new DataOutputStream( new FileOutputStream( tmpFile ) );
-
-                streamLogLines().forEach( logLine -> {
-                    try
-                    {
-                        LogLine.LogInfo logInfo  = logLine.getLogInfo();
-                        if (logInfo.getBrokerName().equals( connectionName ))
+                File tmpFile = File.createTempFile( tmpFileName, ".log", brokerLog.getParentFile() );
+                tmpFile.deleteOnExit();
+                try(FileOutputStream fileOutputStream = new FileOutputStream( tmpFile ); DataOutputStream dataOutputStream = new DataOutputStream( fileOutputStream ))
+                {
+                    tmpFileName = tmpFile.getName();
+                    streamLogLines().forEach( logLine -> {
+                        try
                         {
-                            logLine.setLogInfo( new LogLine.LogInfo( logInfo.brokerName, logInfo.filePath, messagePointer));
-                        }
+                            LogLine.LogInfo logInfo = logLine.getLogInfo();
+                            if ( logInfo.getBrokerName().equals( connectionName ) )
+                            {
+                                logLine.setLogInfo( new LogLine.LogInfo( logInfo.brokerName, logInfo.filePath, messagePointer ) );
+                            }
 
-                        dataOutputStream.write( logLine.getLogString().getBytes() );
-                        dataOutputStream.writeChars( System.getProperty( "line.separator" ) );
-                    }
-                    catch ( Exception e )
-                    {
-                        throw new RuntimeException( "Failure to update the logInfo for connection '" + connectionName + "'." );
-                    }
-                } );
-                org.apache.commons.io.FileUtils.copyFile( tmpFile, brokerLog );
-                org.apache.commons.io.FileUtils.deleteQuietly( tmpFile );
+                            dataOutputStream.write( logLine.getLogString().getBytes() );
+                            dataOutputStream.writeChars( System.getProperty( "line.separator" ) );
+                        }
+                        catch ( Exception e )
+                        {
+                            throw new RuntimeException( "Failure to update the logInfo for connection '" + connectionName + "'." );
+                        }
+                    } );
+
+                    org.apache.commons.io.FileUtils.copyFile( tmpFile, brokerLog );
+                    org.apache.commons.io.FileUtils.deleteQuietly( tmpFile );
+                }
             }
             catch ( Exception e )
             {
                 // Make sure the tmp file got deleted.
+                File tmpFile = new File( brokerLog.getParentFile() + "/"+ tmpFileName );
+                if (tmpFile.exists())
+                {
+                    org.apache.commons.io.FileUtils.deleteQuietly( tmpFile );
+                }
             }
         }
     }
