@@ -275,6 +275,7 @@ public class BrokerIntegration
                             BrokerLogManager.LogLine.LogInfo logInfo = BrokerLogManager.readBrokerLogLine( connectionName );
 
                             AtomicLong nextLinePointer = new AtomicLong( logInfo.getNextMessageToSend() );
+                            AtomicLong numSent = new AtomicLong( 0 );
 
                             for ( BrokerLogger.LogLine.LogEntry logEntry : BrokerLogger.streamLogLines( logInfo ).map(
                                     logLine -> logLine.getLogEntry() ).collect( Collectors.toList() ) )
@@ -286,6 +287,7 @@ public class BrokerIntegration
                                 {
                                     //Send successful. Move pointer one line.
                                     nextLinePointer.getAndIncrement();
+                                    numSent.getAndIncrement();
 
                                     // Used for simulating sending exactly numToSend messages.
                                     if(nextLinePointer.get() - logInfo.getNextMessageToSend() == numToSend)
@@ -300,23 +302,26 @@ public class BrokerIntegration
                                 }
                             }
 
-                            if ( nextLinePointer.get() == (BrokerLogManager.getBrokerLogger( connectionName ).calculateNumberOfLogEntries()) )
+                            if( numSent.get() > 0L)
                             {
-                                // All the messsages have been sent, reset the broker log.
-                                BrokerLogManager.resetBrokerLogger( connectionName );
-                            }
-                            else
-                            {
-                                // The broker has been disconnected before all the messages could be sent.
-                                ConnectionManager.getConnection( connectionName ).setConnected( false );
-
-                                // Not all the messages have been sent, so update the line pointer.
-                                BrokerLogManager.updateNextMessageToSend( connectionName, nextLinePointer.get() );
-
-                                // Start attempting to reconnect
-                                if(!ConnectionManager.getConnection( connectionName ).isReconnecting())
+                                if ( nextLinePointer.get() == (BrokerLogManager.getBrokerLogger( connectionName ).calculateNumberOfLogEntries()) )
                                 {
-                                    reconnectAndResendAsync( connectionName );
+                                    // All the messsages have been sent, reset the broker log.
+                                    BrokerLogManager.resetBrokerLogger( connectionName );
+                                }
+                                else
+                                {
+                                    // The broker has been disconnected before all the messages could be sent.
+                                    ConnectionManager.getConnection( connectionName ).setConnected( false );
+
+                                    // Not all the messages have been sent, so update the line pointer.
+                                    BrokerLogManager.updateNextMessageToSend( connectionName, nextLinePointer.get() );
+
+                                    // Start attempting to reconnect
+                                    if ( !ConnectionManager.getConnection( connectionName ).isReconnecting() )
+                                    {
+                                        reconnectAndResendAsync( connectionName );
+                                    }
                                 }
                             }
                         }
