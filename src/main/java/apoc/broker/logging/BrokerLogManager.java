@@ -105,10 +105,10 @@ public class BrokerLogManager
      * @return
      * @throws Exception
      */
-    public static LogLine.LogInfo readBrokerLogLine(String connectionName) throws Exception
+    public static Stream<LogLine.LogInfo> readBrokerLogLine(String connectionName) throws Exception
     {
         return Files.lines( Paths.get( brokerLog.getPath() ) ).map( LogLine::new ).map( LogLine::getLogInfo ).filter(
-                logInfo -> logInfo.getBrokerName().equals( connectionName ) ).findFirst().get();
+                logInfo -> logInfo.getBrokerName().equals( connectionName ) );
     }
 
     /**

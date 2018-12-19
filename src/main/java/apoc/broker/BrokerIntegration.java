@@ -269,10 +269,10 @@ public class BrokerIntegration
                 if ( getConnection( connectionName ).isConnected() )
                 {
                     Pools.DEFAULT.execute( () -> {
-                        try
+                        try(Stream<BrokerLogManager.LogLine.LogInfo> logInfoStream = BrokerLogManager.readBrokerLogLine( connectionName ))
                         {
                             // Start streaming the lines back from the BrokerLogManager.
-                            BrokerLogManager.LogLine.LogInfo logInfo = BrokerLogManager.readBrokerLogLine( connectionName );
+                            BrokerLogManager.LogLine.LogInfo logInfo = logInfoStream.findFirst().get();
 
                             AtomicLong nextLinePointer = new AtomicLong( logInfo.getNextMessageToSend() );
                             AtomicLong numSent = new AtomicLong( 0 );
