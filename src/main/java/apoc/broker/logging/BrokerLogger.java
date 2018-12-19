@@ -307,7 +307,10 @@ public class BrokerLogger implements AutoCloseable
 
     public Long calculateNumberOfLogEntries() throws Exception
     {
-        return Files.lines( Paths.get( logFile.getPath() ) ).count();
+        try(Stream<String> lines =  Files.lines( Paths.get( logFile.getPath() ) ))
+        {
+            return lines.count();
+        }
     }
 
     public void resetFile()
