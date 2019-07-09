@@ -2,10 +2,10 @@ package apoc.broker.logging;
 
 import apoc.util.JsonUtil;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
-import org.codehaus.jackson.map.ObjectMapper;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 
@@ -25,7 +25,7 @@ import java.util.stream.Stream;
 public class BrokerLogManager
 {
 
-    private static ObjectMapper OBJECT_MAPPER = JsonUtil.OBJECT_MAPPER;
+    private static final ObjectMapper OBJECT_MAPPER = JsonUtil.OBJECT_MAPPER;
 
     private static String dirPath;
     private static GraphDatabaseAPI graphDatabaseAPI;
@@ -54,9 +54,12 @@ public class BrokerLogManager
 
             if (Files.exists(Paths.get(  brokerLog.getPath() ) ))
             {
-                streamLogLines().map( LogLine::getLogInfo ).forEach( logInfo -> {
-                    alreadyLoggedConnectionNames.add(  logInfo.getBrokerName() );
-                } );
+                try(Stream<LogLine> logLineStream = streamLogLines())
+                {
+                    logLineStream.map( LogLine::getLogInfo ).forEach( logInfo -> {
+                        alreadyLoggedConnectionNames.add( logInfo.getBrokerName() );
+                    } );
+                }
             }
 
 
